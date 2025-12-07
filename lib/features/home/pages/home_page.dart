@@ -2,7 +2,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../../core/constants/text_styles.dart';
 import '../../../routes/app_routes.dart';
-import '../widgets/chatbot.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -255,10 +254,8 @@ class HomePage extends StatelessWidget {
         ),
           ],
         ),
-      ),
         ),
-        // Chatbot Widget - Floating button
-        const Chatbot(),
+      ),
       ],
     );
   }
