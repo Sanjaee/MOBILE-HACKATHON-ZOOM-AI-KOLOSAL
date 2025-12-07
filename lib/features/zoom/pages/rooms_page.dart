@@ -749,8 +749,10 @@ class _RoomsPageState extends State<RoomsPage> with SingleTickerProviderStateMix
                           style: ElevatedButton.styleFrom(
                             backgroundColor: _joinRoomIdController.text.trim().isEmpty
                                 ? Colors.white.withValues(alpha: 0.1)
-                                : null,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                                : Colors.transparent,
+                            padding: EdgeInsets.zero,
+                            elevation: 0,
+                            shadowColor: Colors.transparent,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                               side: BorderSide(
@@ -761,11 +763,14 @@ class _RoomsPageState extends State<RoomsPage> with SingleTickerProviderStateMix
                             ),
                           ),
                           child: _joinRoomIdController.text.trim().isEmpty
-                              ? const Text(
-                                  'Gabung',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
+                              ? Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                                  child: const Text(
+                                    'Gabung',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                    ),
                                   ),
                                 )
                               : Container(
@@ -775,7 +780,7 @@ class _RoomsPageState extends State<RoomsPage> with SingleTickerProviderStateMix
                                     ),
                                     borderRadius: BorderRadius.all(Radius.circular(12)),
                                   ),
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                                   child: const Text(
                                     'Gabung',
                                     style: TextStyle(
