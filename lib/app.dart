@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'core/constants/app_colors.dart';
 import 'core/middleware/auth_guard.dart';
+import 'data/services/auth_storage_service.dart';
 import 'features/auth/pages/login_page.dart';
 import 'features/auth/pages/register_page.dart';
 import 'features/auth/pages/verify_otp_page.dart';
@@ -82,11 +85,8 @@ class MyApp extends StatelessWidget {
             roomName: args?['roomName'] ?? 'Room',
           );
         default:
-          return const Scaffold(
-            body: Center(
-              child: Text('Page Not Found'),
-            ),
-          );
+          // Fallback to login if route not found
+          return const LoginPage();
       }
     });
   }
@@ -266,7 +266,40 @@ class _AuthGuardWidgetState extends State<_AuthGuardWidget> {
       );
     }
 
-    return widget.child;
+    // Wrap with PopScope to handle back button
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) async {
+        if (didPop) return;
+        
+        // Check if user has session/auth
+        final authStorage = AuthStorageService();
+        final isLoggedIn = await authStorage.isLoggedIn();
+        
+        if (isLoggedIn) {
+          // If user has session, logout and exit app
+          await authStorage.clearAll();
+          if (Platform.isAndroid) {
+            SystemNavigator.pop();
+          } else if (Platform.isIOS) {
+            exit(0);
+          }
+        } else {
+          // If no session, allow normal back navigation
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          } else {
+            // If no route to pop, exit app
+            if (Platform.isAndroid) {
+              SystemNavigator.pop();
+            } else if (Platform.isIOS) {
+              exit(0);
+            }
+          }
+        }
+      },
+      child: widget.child,
+    );
   }
 }
 
