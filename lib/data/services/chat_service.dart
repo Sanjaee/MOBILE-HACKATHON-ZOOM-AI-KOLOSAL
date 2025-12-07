@@ -13,6 +13,7 @@ class ChatService {
   
   WebSocketChannel? _channel;
   StreamController<ChatMessageModel>? _messageController;
+  StreamController<Map<String, dynamic>>? _aiMessageController; // For AI streaming messages
   bool _isConnected = false;
   String? _currentRoomId;
   Timer? _reconnectTimer;
@@ -97,6 +98,7 @@ class ChatService {
     
     _currentRoomId = roomId;
     _messageController = StreamController<ChatMessageModel>.broadcast();
+    _aiMessageController = StreamController<Map<String, dynamic>>.broadcast();
     
     final token = await _authStorage.getAccessToken();
     if (token == null) {
@@ -126,11 +128,36 @@ class ChatService {
         (data) {
           try {
             final message = json.decode(data);
-            debugPrint('[ChatService] Received WebSocket message: ${message['type']}');
+            final messageType = message['type'] as String?;
+            debugPrint('[ChatService] Received WebSocket message: $messageType');
             
-            if (message['type'] == 'message' && message['payload'] != null) {
+            if (messageType == 'message' && message['payload'] != null) {
               final chatMessage = ChatMessageModel.fromJson(message['payload']);
               _messageController?.add(chatMessage);
+            } else if (messageType == 'ai_typing' && message['payload'] != null) {
+              // AI is typing - broadcast to listeners
+              _aiMessageController?.add({
+                'type': 'ai_typing',
+                'payload': message['payload'],
+              });
+            } else if (messageType == 'ai_stream' && message['payload'] != null) {
+              // AI streaming content - broadcast to listeners
+              _aiMessageController?.add({
+                'type': 'ai_stream',
+                'payload': message['payload'],
+              });
+            } else if (messageType == 'ai_complete' && message['payload'] != null) {
+              // AI complete - broadcast final message
+              _aiMessageController?.add({
+                'type': 'ai_complete',
+                'payload': message['payload'],
+              });
+            } else if (messageType == 'ai_error' && message['payload'] != null) {
+              // AI error - broadcast error
+              _aiMessageController?.add({
+                'type': 'ai_error',
+                'payload': message['payload'],
+              });
             }
           } catch (e) {
             debugPrint('[ChatService] Error parsing WebSocket message: $e');
@@ -161,6 +188,9 @@ class ChatService {
     
     return _messageController!.stream;
   }
+
+  /// Get stream for AI messages (typing, streaming, complete)
+  Stream<Map<String, dynamic>>? get aiMessageStream => _aiMessageController?.stream;
 
   void _startPingTimer() {
     _pingTimer?.cancel();
@@ -203,9 +233,48 @@ class ChatService {
     
     await _messageController?.close();
     _messageController = null;
+    
+    await _aiMessageController?.close();
+    _aiMessageController = null;
   }
 
   /// Check if WebSocket is connected
   bool get isConnected => _isConnected;
+
+  /// Call Kolosal AI Agent API
+  /// POST /api/v1/rooms/:id/kolosal
+  Future<Map<String, dynamic>> callKolosalAgent({
+    required String roomId,
+    required String prompt,
+    String? model,
+    String? workspaceId,
+    List<String>? tools,
+    List<Map<String, dynamic>>? history,
+    bool useAgent = false,
+  }) async {
+    final headers = await _getHeaders();
+    
+    final body = <String, dynamic>{
+      'prompt': prompt,
+      if (model != null) 'model': model,
+      if (useAgent && workspaceId != null) 'use_agent': true,
+      if (useAgent && workspaceId != null) 'workspace_id': workspaceId,
+      if (tools != null && tools.isNotEmpty) 'tools': tools,
+      if (history != null && history.isNotEmpty) 'history': history,
+    };
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/v1/rooms/$roomId/kolosal'),
+      headers: headers,
+      body: json.encode(body),
+    );
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final data = json.decode(response.body);
+      return data['data'] ?? data;
+    }
+    
+    throw Exception('Failed to call AI agent: ${response.body}');
+  }
 }
 

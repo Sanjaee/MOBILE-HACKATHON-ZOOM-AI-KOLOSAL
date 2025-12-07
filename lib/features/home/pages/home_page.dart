@@ -1,8 +1,8 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../../../core/widgets/custom_app_bar.dart';
-import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/text_styles.dart';
 import '../../../routes/app_routes.dart';
+import '../widgets/chatbot.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -11,26 +11,141 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: isDark ? AppColors.backgroundDark : AppColors.background,
-      appBar: CustomAppBar(
-        title: 'BeRealTime',
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: const Color(0xFF0A0A0F),
+          appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
         leading: const SizedBox.shrink(),
-        onProfileTap: () {
-          Navigator.of(context).pushNamed(AppRoutes.profile);
-        },
+        title: const Text(
+          'Zacode',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: CircleAvatar(
+              backgroundColor: Colors.transparent,
+              radius: 18,
+              child: Container(
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.fromBorderSide(
+                    BorderSide(
+                      color: Color(0xFF6366F1),
+                      width: 2,
+                    ),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.person,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+            ),
+            onPressed: () {
+              Navigator.of(context).pushNamed(AppRoutes.profile);
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight,
+        child: Stack(
+          children: [
+            // Animated gradient background
+            Positioned.fill(
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Color(0xFF0A0A0F),
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                child: Stack(
                   children: [
+                    // Primary gradient orb - matches Next.js opacity-30 blur-[120px]
+                    Positioned(
+                      left: -200,
+                      top: -200,
+                      child: Container(
+                        width: 800,
+                        height: 800,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              const Color(0xFF6366F1).withValues(alpha: 0.3),
+                              const Color(0xFF6366F1).withValues(alpha: 0.0),
+                            ],
+                            stops: const [0.0, 0.7],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Secondary gradient orb - matches Next.js opacity-25 blur-[100px]
+                    Positioned(
+                      right: -100,
+                      bottom: -100,
+                      child: Container(
+                        width: 600,
+                        height: 600,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              const Color(0xFFEC4899).withValues(alpha: 0.25),
+                              const Color(0xFFEC4899).withValues(alpha: 0.0),
+                            ],
+                            stops: const [0.0, 0.7],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Tertiary gradient orb - matches Next.js opacity-20 blur-[80px]
+                    Positioned(
+                      left: MediaQuery.of(context).size.width / 2 - 250,
+                      top: MediaQuery.of(context).size.height / 2 - 250,
+                      child: Container(
+                        width: 500,
+                        height: 500,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              const Color(0xFF06B6D4).withValues(alpha: 0.2),
+                              const Color(0xFF06B6D4).withValues(alpha: 0.0),
+                            ],
+                            stops: const [0.0, 0.7],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Grid overlay
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: GridPainter(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Main content
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
                     const SizedBox(height: 40),
                     // Main heading with gradient
                     Padding(
@@ -69,7 +184,7 @@ class HomePage extends StatelessWidget {
                         'Transkrip, analisis, dan rekomendasi otomatis dari setiap pertemuan dengan investor.',
                         textAlign: TextAlign.center,
                         style: AppTextStyles.bodyMedium(
-                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
+                          color: Colors.grey[400],
                         ),
                       ),
                     ),
@@ -128,7 +243,7 @@ class HomePage extends StatelessWidget {
                         'Platform Meeting UMKM dengan AI Agent · LiveKit · Kolosal AI',
                         textAlign: TextAlign.center,
                         style: AppTextStyles.caption(
-                          color: isDark ? AppColors.textTertiaryDark : AppColors.textTertiary,
+                          color: Colors.grey[600],
                         ),
                       ),
                     ),
@@ -138,7 +253,13 @@ class HomePage extends StatelessWidget {
             );
           },
         ),
+          ],
+        ),
       ),
+        ),
+        // Chatbot Widget - Floating button
+        const Chatbot(),
+      ],
     );
   }
   
@@ -216,32 +337,30 @@ class HomePage extends StatelessWidget {
   }) {
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [Colors.grey[900]!, Colors.grey[850]!]
-              : [Colors.white, Colors.grey[50]!],
-        ),
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.grey[200]!,
+          color: Colors.white.withValues(alpha: 0.1),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
             child: Row(
               children: [
                 Container(
@@ -270,8 +389,8 @@ class HomePage extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: TextStyle(
-                          color: isDark ? Colors.white : Colors.grey[900],
+                        style: const TextStyle(
+                          color: Colors.white,
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
@@ -280,24 +399,59 @@ class HomePage extends StatelessWidget {
                       Text(
                         subtitle,
                         style: TextStyle(
-                          color: isDark ? Colors.grey[400] : Colors.grey[600],
+                          color: Colors.grey[400],
                           fontSize: 14,
                         ),
                       ),
                     ],
                   ),
                 ),
-                Icon(
+                const Icon(
                   Icons.arrow_forward_ios,
-                  color: isDark ? Colors.grey[600] : Colors.grey[400],
+                  color: Colors.grey,
                   size: 18,
                 ),
               ],
+            ),
+              ),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+// Grid painter for background - matches Next.js opacity-[0.03]
+class GridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.03)
+      ..strokeWidth = 1;
+
+    const gridSize = 100.0;
+
+    // Draw vertical lines
+    for (double x = 0; x < size.width; x += gridSize) {
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, size.height),
+        paint,
+      );
+    }
+
+    // Draw horizontal lines
+    for (double y = 0; y < size.height; y += gridSize) {
+      canvas.drawLine(
+        Offset(0, y),
+        Offset(size.width, y),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 

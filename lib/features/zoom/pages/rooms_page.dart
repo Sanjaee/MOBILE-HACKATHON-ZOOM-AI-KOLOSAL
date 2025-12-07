@@ -483,6 +483,48 @@ class _RoomsPageState extends State<RoomsPage> with SingleTickerProviderStateMix
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0F),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: Container(
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF6366F1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(
+            Icons.videocam,
+            color: Colors.white,
+            size: 24,
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: CircleAvatar(
+              backgroundColor: Colors.transparent,
+              radius: 18,
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFF6366F1),
+                    width: 2,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.person,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+            ),
+            onPressed: () {
+              Navigator.pushNamed(context, AppRoutes.profile);
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: SafeArea(
         child: Stack(
           children: [
@@ -494,7 +536,7 @@ class _RoomsPageState extends State<RoomsPage> with SingleTickerProviderStateMix
                 ),
                 child: Stack(
                   children: [
-                    // Primary gradient orb
+                    // Primary gradient orb - matches Next.js opacity-30 blur-[120px]
                     Positioned(
                       left: -200,
                       top: -200,
@@ -506,13 +548,14 @@ class _RoomsPageState extends State<RoomsPage> with SingleTickerProviderStateMix
                           gradient: RadialGradient(
                             colors: [
                               const Color(0xFF6366F1).withValues(alpha: 0.3),
-                              Colors.transparent,
+                              const Color(0xFF6366F1).withValues(alpha: 0.0),
                             ],
+                            stops: const [0.0, 0.7],
                           ),
                         ),
                       ),
                     ),
-                    // Secondary gradient orb
+                    // Secondary gradient orb - matches Next.js opacity-25 blur-[100px]
                     Positioned(
                       right: -100,
                       bottom: -100,
@@ -524,13 +567,14 @@ class _RoomsPageState extends State<RoomsPage> with SingleTickerProviderStateMix
                           gradient: RadialGradient(
                             colors: [
                               const Color(0xFFEC4899).withValues(alpha: 0.25),
-                              Colors.transparent,
+                              const Color(0xFFEC4899).withValues(alpha: 0.0),
                             ],
+                            stops: const [0.0, 0.7],
                           ),
                         ),
                       ),
                     ),
-                    // Tertiary gradient orb
+                    // Tertiary gradient orb - matches Next.js opacity-20 blur-[80px]
                     Positioned(
                       left: MediaQuery.of(context).size.width / 2 - 250,
                       top: MediaQuery.of(context).size.height / 2 - 250,
@@ -542,8 +586,9 @@ class _RoomsPageState extends State<RoomsPage> with SingleTickerProviderStateMix
                           gradient: RadialGradient(
                             colors: [
                               const Color(0xFF06B6D4).withValues(alpha: 0.2),
-                              Colors.transparent,
+                              const Color(0xFF06B6D4).withValues(alpha: 0.0),
                             ],
+                            stops: const [0.0, 0.7],
                           ),
                         ),
                       ),
@@ -590,53 +635,82 @@ class _RoomsPageState extends State<RoomsPage> with SingleTickerProviderStateMix
                     const SizedBox(height: 16),
                     
                     // Subtitle
-                    Text(
-                      'Terhubung, berkolaborasi, dan merayakan dari mana saja dengan '
-                      'Zoom Meeting AI Agent. Platform meeting profesional untuk '
-                      'UMKM melakukan pertemuan dengan investor. Dapatkan transkrip, '
-                      'analisis, dan rekomendasi otomatis dari setiap pertemuan.',
+                    RichText(
                       textAlign: TextAlign.center,
-                      style: AppTextStyles.bodyMedium(
-                        color: Colors.grey[400],
+                      text: TextSpan(
+                        style: AppTextStyles.bodyMedium(
+                          color: Colors.grey[400],
+                        ),
+                        children: [
+                          const TextSpan(text: 'Terhubung, berkolaborasi, dan merayakan dari mana saja dengan '),
+                          TextSpan(
+                            text: 'Zoom Meeting AI Agent',
+                            style: AppTextStyles.bodyMedium(
+                              color: const Color(0xFF818CF8),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const TextSpan(text: '. Platform meeting profesional untuk '),
+                          TextSpan(
+                            text: 'UMKM',
+                            style: AppTextStyles.bodyMedium(
+                              color: const Color(0xFFA78BFA),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const TextSpan(text: ' melakukan pertemuan dengan '),
+                          TextSpan(
+                            text: 'investor',
+                            style: AppTextStyles.bodyMedium(
+                              color: const Color(0xFFF472B6),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const TextSpan(text: '. Dapatkan transkrip, analisis, dan rekomendasi otomatis dari setiap pertemuan.'),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 32),
 
                     // Action Buttons
                     // Create Room Button
-                    SizedBox(
+                    Container(
                       width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _showCreateRoomDialog,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          padding: const EdgeInsets.symmetric(vertical: 20),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6), Color(0xFFEC4899)],
                         ),
-                        child: Container(
-                          decoration: const BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [Color(0xFF6366F1), Color(0xFF8B5CF6), Color(0xFFEC4899)],
-                            ),
-                            borderRadius: BorderRadius.all(Radius.circular(8)),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF8B5CF6).withValues(alpha: 0.4),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.add, color: Colors.white, size: 24),
-                              SizedBox(width: 8),
-                              Text(
-                                'Rapat baru',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _showCreateRoomDialog,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add, color: Colors.white, size: 24),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Rapat baru',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -767,7 +841,7 @@ class _RoomsPageState extends State<RoomsPage> with SingleTickerProviderStateMix
   }
 }
 
-// Grid painter for background
+// Grid painter for background - matches Next.js opacity-[0.03]
 class GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {

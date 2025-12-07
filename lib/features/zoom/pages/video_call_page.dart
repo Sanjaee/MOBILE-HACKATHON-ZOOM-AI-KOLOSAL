@@ -140,8 +140,22 @@ class _VideoCallPageState extends State<VideoCallPage> with SingleTickerProvider
         debugPrint('[VideoCall] Could not enable camera/mic: $e');
       }
 
+      // Get existing remote participants and subscribe to their tracks
+      final existingParticipants = _room!.remoteParticipants.values.toList();
+      for (final participant in existingParticipants) {
+        // Subscribe to all available video tracks
+        // Subscribe to all video tracks from remote participants
+        // LiveKit automatically subscribes to tracks, but we ensure they're subscribed
+        for (final publication in participant.trackPublications.values) {
+          if (publication.source == TrackSource.camera && publication.track == null) {
+            // Track is not yet subscribed, wait for TrackSubscribedEvent
+            debugPrint('[VideoCall] Video track from ${participant.identity} not yet subscribed, waiting...');
+          }
+        }
+      }
+
       setState(() {
-        _remoteParticipants = _room!.remoteParticipants.values.toList();
+        _remoteParticipants = existingParticipants;
         _isConnecting = false;
         _isMicEnabled = _localParticipant?.isMicrophoneEnabled() ?? false;
         _isCameraEnabled = _localParticipant?.isCameraEnabled() ?? false;
@@ -172,8 +186,13 @@ class _VideoCallPageState extends State<VideoCallPage> with SingleTickerProvider
         });
       })
       ..on<TrackSubscribedEvent>((event) {
-        debugPrint('[VideoCall] Track subscribed: ${event.track.kind}');
-        setState(() {});
+        debugPrint('[VideoCall] Track subscribed: ${event.track.kind}, participant: ${event.participant.identity}');
+        // Force rebuild to show video
+        if (mounted) {
+          setState(() {
+            _remoteParticipants = _room!.remoteParticipants.values.toList();
+          });
+        }
       })
       ..on<TrackUnsubscribedEvent>((event) {
         debugPrint('[VideoCall] Track unsubscribed');
@@ -304,6 +323,7 @@ class _VideoCallPageState extends State<VideoCallPage> with SingleTickerProvider
               Text(
                 'Menghubungkan ke ${widget.roomName}...',
                 style: const TextStyle(color: Colors.white, fontSize: 16),
+                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -425,6 +445,7 @@ class _VideoCallPageState extends State<VideoCallPage> with SingleTickerProvider
   }
 
   Widget _buildHeader() {
+    final participantCount = _remoteParticipants.length + 1;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       color: Colors.black.withValues(alpha: 0.8),
@@ -435,21 +456,62 @@ class _VideoCallPageState extends State<VideoCallPage> with SingleTickerProvider
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.roomName,
-                  style: const TextStyle(
+                  widget.roomId,
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 12,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Meeting',
+                  style: TextStyle(
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+              ],
+            ),
+          ),
+          // Chat icon
+          IconButton(
+            icon: const Icon(Icons.message, color: Colors.white, size: 24),
+            onPressed: _toggleChat,
+          ),
+          // Participant count
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.people, color: Colors.white, size: 16),
+                const SizedBox(width: 4),
                 Text(
-                  '${_remoteParticipants.length + 1} peserta',
-                  style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 12,
+                  '$participantCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Status dot
+          Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: Colors.blue,
+              shape: BoxShape.circle,
             ),
           ),
         ],
@@ -473,43 +535,117 @@ class _VideoCallPageState extends State<VideoCallPage> with SingleTickerProvider
       );
     }
 
-    // Determine grid layout
+    final participantCount = allParticipants.length;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 768;
+
+    // Determine grid layout based on participant count
+    // Similar to Next.js: 
+    // - 1: full width/height (1 column)
+    // - 2: mobile: 1 column (vertical), desktop: 2 columns (horizontal)
+    // - 3-4: 2 columns (grid 2x2)
+    // - 5+: 2-3 columns depending on screen size
+    
     int crossAxisCount;
-    if (allParticipants.length == 1) {
+    if (participantCount == 1) {
       crossAxisCount = 1;
-    } else if (allParticipants.length <= 4) {
+    } else if (participantCount == 2) {
+      // Mobile: 1 column (vertical), Desktop: 2 columns (horizontal)
+      crossAxisCount = isMobile ? 1 : 2;
+    } else if (participantCount <= 4) {
+      // Grid 2x2
       crossAxisCount = 2;
+    } else if (participantCount == 5) {
+      // 2 columns on mobile, 2-4 on larger screens
+      crossAxisCount = isMobile ? 2 : 2;
     } else {
-      crossAxisCount = 3;
+      // 2 columns on mobile, 3 on tablet, 4 on desktop
+      if (isMobile) {
+        crossAxisCount = 2;
+      } else if (screenWidth < 1024) {
+        crossAxisCount = 3;
+      } else {
+        crossAxisCount = 4;
+      }
     }
 
-    return GridView.builder(
+    // Calculate available height (screen height - header - controls - padding)
+    final screenHeight = MediaQuery.of(context).size.height;
+    final headerHeight = 60.0; // Approximate header height
+    final controlsHeight = 80.0; // Approximate controls height
+    final padding = 16.0; // Total padding (8 top + 8 bottom)
+    final availableHeight = screenHeight - headerHeight - controlsHeight - padding;
+    final availableWidth = screenWidth - padding;
+    
+    // Calculate aspect ratio based on layout
+    double childAspectRatio;
+    if (participantCount == 1) {
+      // Single participant: full width and height
+      childAspectRatio = availableWidth / availableHeight;
+    } else if (participantCount == 2 && isMobile) {
+      // 2 participants on mobile: vertical layout (1 column)
+      final itemHeight = (availableHeight - 8) / 2; // 2 items with 8px spacing
+      final itemWidth = availableWidth;
+      childAspectRatio = itemWidth / itemHeight;
+    } else {
+      // Multiple participants: calculate based on grid
+      final rows = (participantCount / crossAxisCount).ceil();
+      final itemHeight = (availableHeight - (rows - 1) * 8) / rows; // Subtract spacing between rows
+      final itemWidth = (availableWidth - (crossAxisCount - 1) * 8) / crossAxisCount; // Subtract spacing between columns
+      childAspectRatio = itemWidth / itemHeight;
+    }
+    
+    return Padding(
       padding: const EdgeInsets.all(8),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-        childAspectRatio: 16 / 9,
+      child: GridView.builder(
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+          childAspectRatio: childAspectRatio,
+        ),
+        itemCount: allParticipants.length,
+        itemBuilder: (context, index) {
+          return _buildParticipantTile(
+            allParticipants[index],
+            isLocal: index == 0 && _localParticipant != null,
+          );
+        },
       ),
-      itemCount: allParticipants.length,
-      itemBuilder: (context, index) {
-        return _buildParticipantTile(
-          allParticipants[index],
-          isLocal: index == 0 && _localParticipant != null,
-        );
-      },
     );
   }
 
   Widget _buildParticipantTile(Participant participant, {bool isLocal = false}) {
-    // Get video track
+    // Get video track - check both subscribed and available tracks
     VideoTrack? videoTrack;
+    
+    // First, try to get from subscribed tracks
     final videoPublications = participant.videoTrackPublications
         .where((pub) => pub.source == TrackSource.camera)
         .toList();
     
-    if (videoPublications.isNotEmpty && videoPublications.first.track != null) {
-      videoTrack = videoPublications.first.track as VideoTrack;
+    if (videoPublications.isNotEmpty) {
+      final publication = videoPublications.first;
+      // Check if track exists and is subscribed
+      debugPrint('[VideoCall] Video publication found: track=${publication.track != null}, source=${publication.source}');
+      if (publication.track != null && publication.track is VideoTrack) {
+        videoTrack = publication.track as VideoTrack;
+        debugPrint('[VideoCall] Video track found and ready');
+      } else {
+        debugPrint('[VideoCall] Video track not available yet, waiting for subscription...');
+      }
+    } else {
+      debugPrint('[VideoCall] No video publications found for participant: ${participant.identity}');
+    }
+    
+    // For local participant, also check local video track
+    if (isLocal && videoTrack == null && _localParticipant != null) {
+      final localVideoPub = _localParticipant!.videoTrackPublications
+          .where((pub) => pub.source == TrackSource.camera)
+          .firstOrNull;
+      if (localVideoPub?.track != null && localVideoPub!.track is VideoTrack) {
+        videoTrack = localVideoPub.track as VideoTrack;
+      }
     }
 
     // Check mic status
@@ -518,6 +654,13 @@ class _VideoCallPageState extends State<VideoCallPage> with SingleTickerProvider
         .every((pub) => pub.muted || pub.track == null);
 
     final hasVideo = videoTrack != null;
+    
+    // Debug: Log video track status
+    if (isLocal) {
+      debugPrint('[VideoCall] Local participant - hasVideo: $hasVideo');
+    } else {
+      debugPrint('[VideoCall] Remote participant ${participant.identity} - hasVideo: $hasVideo');
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -530,8 +673,10 @@ class _VideoCallPageState extends State<VideoCallPage> with SingleTickerProvider
         children: [
           // Video or placeholder
           if (hasVideo)
-            VideoTrackRenderer(
-              videoTrack,
+            SizedBox.expand(
+              child: VideoTrackRenderer(
+                videoTrack!,
+              ),
             )
           else
             _buildNoVideoPlaceholder(participant.identity),

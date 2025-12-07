@@ -27,8 +27,14 @@ class _ChatSidebarState extends State<ChatSidebar> {
   List<ChatMessageModel> _messages = [];
   bool _isLoading = true;
   bool _isSending = false;
+  bool _isAIStreaming = false;
+  String? _streamingUserId;
   String? _currentUserId;
   StreamSubscription<ChatMessageModel>? _messageSubscription;
+  StreamSubscription<Map<String, dynamic>>? _aiMessageSubscription;
+  
+  // Store streaming AI messages temporarily
+  Map<String, ChatMessageModel> _streamingAIMessages = {};
 
   @override
   void initState() {
@@ -39,6 +45,7 @@ class _ChatSidebarState extends State<ChatSidebar> {
   @override
   void dispose() {
     _messageSubscription?.cancel();
+    _aiMessageSubscription?.cancel();
     _chatService.disconnectWebSocket();
     _messageController.dispose();
     _scrollController.dispose();
@@ -76,6 +83,90 @@ class _ChatSidebarState extends State<ChatSidebar> {
           _scrollToBottom();
         }
       });
+
+      // Listen for AI messages (typing, streaming, complete)
+      final aiStream = _chatService.aiMessageStream;
+      if (aiStream != null) {
+        _aiMessageSubscription = aiStream.listen((aiMessage) {
+          if (!mounted) return;
+          
+          final type = aiMessage['type'] as String?;
+          final payload = aiMessage['payload'] as Map<String, dynamic>?;
+          
+          if (type == 'ai_typing' && payload != null) {
+            setState(() {
+              _isAIStreaming = true;
+              _streamingUserId = payload['user_id'] as String?;
+            });
+            debugPrint('[ChatSidebar] AI typing started by: ${_streamingUserId}');
+          } else if (type == 'ai_stream' && payload != null) {
+            setState(() {
+              _isAIStreaming = true;
+              _streamingUserId = payload['user_id'] as String?;
+            });
+            
+            final tempId = payload['id'] as String? ?? 'ai-temp-${DateTime.now().millisecondsSinceEpoch}';
+            final content = payload['content'] as String? ?? '';
+            final userId = payload['user_id'] as String? ?? 'ai-agent';
+            final userName = payload['user_name'] as String? ?? 'AI Agent';
+            final userEmail = payload['user_email'] as String? ?? 'ai@agent.com';
+            
+            // Update or create streaming message
+            final streamingMessage = ChatMessageModel(
+              id: tempId,
+              roomId: widget.roomId,
+              userId: userId,
+              userName: userName,
+              userEmail: userEmail,
+              message: content,
+              createdAt: DateTime.now(),
+            );
+            
+            setState(() {
+              _streamingAIMessages[tempId] = streamingMessage;
+              
+              // Remove old streaming message and add new one
+              _messages.removeWhere((m) => m.id == tempId);
+              _messages.add(streamingMessage);
+            });
+            _scrollToBottom();
+          } else if (type == 'ai_complete' && payload != null) {
+            setState(() {
+              _isAIStreaming = false;
+              _streamingUserId = null;
+            });
+            
+            final tempId = payload['temp_id'] as String?;
+            final finalMessageData = payload['message'] as Map<String, dynamic>?;
+            
+            if (tempId != null) {
+              // Remove streaming message
+              _messages.removeWhere((m) => m.id == tempId);
+              _streamingAIMessages.remove(tempId);
+            }
+            
+            if (finalMessageData != null) {
+              // Add final message
+              final finalMessage = ChatMessageModel.fromJson(finalMessageData);
+              final exists = _messages.any((m) => m.id == finalMessage.id);
+              if (!exists) {
+                setState(() {
+                  _messages.add(finalMessage);
+                });
+                _scrollToBottom();
+              }
+            }
+          } else if (type == 'ai_error' && payload != null) {
+            setState(() {
+              _isAIStreaming = false;
+              _streamingUserId = null;
+            });
+            
+            final errorMsg = payload['error'] as String? ?? 'Terjadi kesalahan pada AI';
+            _showError(errorMsg);
+          }
+        });
+      }
     } catch (e) {
       debugPrint('[ChatSidebar] Error initializing chat: $e');
       if (mounted) {
@@ -112,34 +203,91 @@ class _ChatSidebarState extends State<ChatSidebar> {
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
-    if (text.isEmpty || _isSending) return;
+    if (text.isEmpty || _isSending || _isAIStreaming) return;
 
-    setState(() {
-      _isSending = true;
-    });
+    // Check if it's an AI request
+    final isAIRequest = text.toLowerCase().startsWith('@ai ') || text.toLowerCase().startsWith('@agen ');
+    final aiPrompt = isAIRequest 
+        ? text.replaceFirst(RegExp(r'^@(ai|agen)\s+', caseSensitive: false), '').trim()
+        : null;
 
-    try {
-      final message = await _chatService.sendMessage(widget.roomId, text);
-      _messageController.clear();
-      
-      // Add message if not already received via WebSocket
-      if (mounted) {
-        setState(() {
-          final exists = _messages.any((m) => m.id == message.id);
-          if (!exists) {
-            _messages.add(message);
-          }
-        });
-        _scrollToBottom();
+    if (isAIRequest && aiPrompt != null && aiPrompt.isNotEmpty) {
+      // Handle AI request
+      setState(() {
+        _isSending = true;
+      });
+
+      try {
+        // Call Kolosal API (without agent mode since we don't have valid workspace_id)
+        // Backend will use regular chat mode
+        await _chatService.callKolosalAgent(
+          roomId: widget.roomId,
+          prompt: aiPrompt,
+          useAgent: false, // Don't use agent mode without valid workspace_id
+        );
+        
+        // Clear input - WebSocket will handle the rest
+        _messageController.clear();
+        
+        // Add user message to chat
+        final userMessage = ChatMessageModel(
+          id: 'user-${DateTime.now().millisecondsSinceEpoch}',
+          roomId: widget.roomId,
+          userId: _currentUserId ?? 'unknown',
+          userName: 'You',
+          userEmail: '',
+          message: text,
+          createdAt: DateTime.now(),
+        );
+        
+        if (mounted) {
+          setState(() {
+            _messages.add(userMessage);
+          });
+          _scrollToBottom();
+        }
+      } catch (e) {
+        debugPrint('[ChatSidebar] Error calling AI: $e');
+        _showError('Gagal memanggil AI: $e');
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isSending = false;
+          });
+        }
       }
-    } catch (e) {
-      debugPrint('[ChatSidebar] Error sending message: $e');
-      _showError('Gagal mengirim pesan');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSending = false;
-        });
+    } else if (isAIRequest && (aiPrompt == null || aiPrompt.isEmpty)) {
+      // AI request but no prompt
+      _showError('Pertanyaan AI tidak boleh kosong. Silakan ketik pertanyaan setelah @ai atau @agen.');
+    } else {
+      // Regular message
+      setState(() {
+        _isSending = true;
+      });
+
+      try {
+        final message = await _chatService.sendMessage(widget.roomId, text);
+        _messageController.clear();
+        
+        // Add message if not already received via WebSocket
+        if (mounted) {
+          setState(() {
+            final exists = _messages.any((m) => m.id == message.id);
+            if (!exists) {
+              _messages.add(message);
+            }
+          });
+          _scrollToBottom();
+        }
+      } catch (e) {
+        debugPrint('[ChatSidebar] Error sending message: $e');
+        _showError('Gagal mengirim pesan');
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isSending = false;
+          });
+        }
       }
     }
   }
@@ -279,6 +427,9 @@ class _ChatSidebarState extends State<ChatSidebar> {
   }
 
   Widget _buildMessageBubble(ChatMessageModel message, bool isOwnMessage) {
+    final isAI = message.userId == 'ai-agent' || message.userEmail == 'ai@agent.com' || message.userName == 'AI Agent';
+    final isStreaming = _streamingAIMessages.containsKey(message.id);
+    
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -288,25 +439,36 @@ class _ChatSidebarState extends State<ChatSidebar> {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isOwnMessage) ...[
-            // Avatar for other users
+            // Avatar for other users / AI
             Container(
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: const Color(0xFF4B5563), // gray-600
+                gradient: isAI
+                    ? const LinearGradient(
+                        colors: [Color(0xFF10B981), Color(0xFF059669)],
+                      )
+                    : null,
+                color: isAI ? null : const Color(0xFF4B5563), // gray-600
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Center(
-                child: Text(
-                  message.userName.isNotEmpty 
-                      ? message.userName[0].toUpperCase() 
-                      : '?',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                child: isAI
+                    ? const Icon(
+                        Icons.smart_toy,
+                        color: Colors.white,
+                        size: 18,
+                      )
+                    : Text(
+                        message.userName.isNotEmpty 
+                            ? message.userName[0].toUpperCase() 
+                            : '?',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
               ),
             ),
             const SizedBox(width: 8),
@@ -322,12 +484,30 @@ class _ChatSidebarState extends State<ChatSidebar> {
                 if (!isOwnMessage)
                   Padding(
                     padding: const EdgeInsets.only(left: 4, bottom: 4),
-                    child: Text(
-                      message.userName,
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 12,
-                      ),
+                    child: Row(
+                      children: [
+                        Text(
+                          message.userName,
+                          style: TextStyle(
+                            color: isAI ? const Color(0xFF10B981) : Colors.grey[400],
+                            fontSize: 12,
+                            fontWeight: isAI ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                        if (isStreaming) ...[
+                          const SizedBox(width: 4),
+                          SizedBox(
+                            width: 8,
+                            height: 8,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                const Color(0xFF10B981),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 
@@ -340,17 +520,25 @@ class _ChatSidebarState extends State<ChatSidebar> {
                   decoration: BoxDecoration(
                     color: isOwnMessage 
                         ? const Color(0xFF2563EB) // blue-600
-                        : const Color(0xFF374151), // gray-700
+                        : isAI
+                            ? const Color(0xFF10B981).withValues(alpha: 0.2) // green with opacity
+                            : const Color(0xFF374151), // gray-700
                     borderRadius: BorderRadius.only(
                       topLeft: const Radius.circular(16),
                       topRight: const Radius.circular(16),
                       bottomLeft: Radius.circular(isOwnMessage ? 16 : 4),
                       bottomRight: Radius.circular(isOwnMessage ? 4 : 16),
                     ),
+                    border: isAI && !isOwnMessage
+                        ? Border.all(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                            width: 1,
+                          )
+                        : null,
                   ),
                   child: Text(
                     message.message,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.white,
                       fontSize: 14,
                       height: 1.4,
@@ -381,12 +569,6 @@ class _ChatSidebarState extends State<ChatSidebar> {
 
   Widget _buildInput() {
     return Container(
-      padding: EdgeInsets.fromLTRB(
-        12, 
-        12, 
-        12, 
-        12 + MediaQuery.of(context).viewPadding.bottom,
-      ),
       decoration: const BoxDecoration(
         color: Color(0xFF111827), // gray-900
         borderRadius: BorderRadius.only(
@@ -394,59 +576,91 @@ class _ChatSidebarState extends State<ChatSidebar> {
           bottomRight: Radius.circular(16),
         ),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF374151), // gray-700
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: TextField(
-                controller: _messageController,
-                focusNode: _focusNode,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-                decoration: InputDecoration(
-                  hintText: 'Ketik pesan...',
-                  hintStyle: TextStyle(color: Colors.grey[500]),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              12, 
+              12, 
+              12, 
+              12,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF374151), // gray-700
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: TextField(
+                      controller: _messageController,
+                      focusNode: _focusNode,
+                      enabled: !_isAIStreaming,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: _isAIStreaming 
+                            ? 'AI sedang memproses...'
+                            : 'Ketik @ai',
+                        hintStyle: TextStyle(color: Colors.grey[500]),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                      ),
+                      maxLines: 3,
+                      minLines: 1,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _sendMessage(),
+                    ),
                   ),
                 ),
-                maxLines: 3,
-                minLines: 1,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _sendMessage(),
-              ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: (_isSending || _isAIStreaming) ? null : _sendMessage,
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: (_isSending || _isAIStreaming)
+                          ? Colors.grey[700] 
+                          : const Color(0xFF2563EB), // blue-600
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: (_isSending || _isAIStreaming)
+                        ? const Padding(
+                            padding: EdgeInsets.all(10),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.send,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: _isSending ? null : _sendMessage,
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: _isSending 
-                    ? Colors.grey[700] 
-                    : const Color(0xFF2563EB), // blue-600
-                borderRadius: BorderRadius.circular(22),
+          // Tip text
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              0,
+              16,
+              8 + MediaQuery.of(context).viewPadding.bottom,
+            ),
+            child: Text(
+              'Tip: Gunakan @ai atau @agen di awal pesan untuk bertanya ke AI. Upload gambar untuk OCR.',
+              style: TextStyle(
+                color: Colors.grey[500],
+                fontSize: 12,
               ),
-              child: _isSending
-                  ? const Padding(
-                      padding: EdgeInsets.all(10),
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(
-                      Icons.send,
-                      color: Colors.white,
-                      size: 20,
-                    ),
             ),
           ),
         ],

@@ -19,7 +19,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'BeRealTime',
+      title: 'Zacode',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
