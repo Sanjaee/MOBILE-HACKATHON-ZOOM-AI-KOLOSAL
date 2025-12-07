@@ -23,38 +23,54 @@ class AuthGuard {
         routeName == AppRoutes.verifyResetPassword;
   }
 
-  // Guard auth routes - redirect to home if already logged in
+  /// Middleware: Mencegah user yang sudah login mengakses halaman auth
+  /// Jika user sudah login dan mencoba akses login/register/etc, redirect ke home
   static Future<String?> guardAuthRoute(
     String routeName,
     BuildContext context,
   ) async {
+    // Cek apakah route ini adalah halaman auth
+    if (!isAuthRoute(routeName)) {
+      return null; // Bukan halaman auth, biarkan lewat
+    }
+
+    // Cek apakah user sudah login
     final isLoggedIn = await _authStorage.isLoggedIn();
 
-    if (isLoggedIn && isAuthRoute(routeName)) {
-      // User is logged in but trying to access auth page - redirect to home
+    if (isLoggedIn) {
+      // User sudah login tapi mencoba akses halaman auth
+      // Redirect ke home untuk mencegah akses ke halaman auth
+      debugPrint('[AuthGuard] User sudah login, redirect dari $routeName ke ${AppRoutes.home}');
       return AppRoutes.home;
     }
 
-    return null; // Allow access
+    // User belum login, boleh akses halaman auth
+    return null;
   }
 
-  // Guard protected routes - redirect to login if not logged in
+  /// Middleware: Mencegah user yang belum login mengakses halaman protected
+  /// Jika user belum login dan mencoba akses home/profile/etc, redirect ke login
   static Future<String?> guardProtectedRoute(
     String routeName,
     BuildContext context,
   ) async {
+    // Cek apakah route ini memerlukan authentication
     if (!requiresAuth(routeName)) {
-      return null; // Route doesn't require auth
+      return null; // Route tidak memerlukan auth, biarkan lewat
     }
 
+    // Cek apakah user sudah login
     final isLoggedIn = await _authStorage.isLoggedIn();
 
     if (!isLoggedIn) {
-      // User not logged in but trying to access protected route - redirect to login
+      // User belum login tapi mencoba akses halaman protected
+      // Redirect ke login
+      debugPrint('[AuthGuard] User belum login, redirect dari $routeName ke ${AppRoutes.login}');
       return AppRoutes.login;
     }
 
-    return null; // Allow access
+    // User sudah login, boleh akses halaman protected
+    return null;
   }
 }
 

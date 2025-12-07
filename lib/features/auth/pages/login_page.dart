@@ -8,6 +8,7 @@ import '../../../data/services/auth_service.dart';
 import '../../../data/services/api_service_factory.dart';
 import '../../../data/services/auth_storage_service.dart';
 import '../../../routes/app_routes.dart';
+import '../widgets/auth_page_wrapper.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -89,15 +90,16 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: isDark ? AppColors.backgroundDark : AppColors.background,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
+    return AuthPageWrapper(
+      child: Scaffold(
         backgroundColor: isDark ? AppColors.backgroundDark : AppColors.background,
-        elevation: 0,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          backgroundColor: isDark ? AppColors.backgroundDark : AppColors.background,
+          elevation: 0,
+        ),
+        body: SafeArea(
+          child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Form(
             key: _formKey,
@@ -217,6 +219,7 @@ class _LoginPageState extends State<LoginPage> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );

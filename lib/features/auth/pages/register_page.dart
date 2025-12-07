@@ -7,6 +7,7 @@ import '../../../core/constants/text_styles.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/api_service_factory.dart';
 import '../../../routes/app_routes.dart';
+import '../widgets/auth_page_wrapper.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -91,8 +92,9 @@ class _RegisterPageState extends State<RegisterPage> {
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: isDark ? AppColors.backgroundDark : AppColors.background,
+    return AuthPageWrapper(
+      child: Scaffold(
+        backgroundColor: isDark ? AppColors.backgroundDark : AppColors.background,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         backgroundColor: isDark ? AppColors.backgroundDark : AppColors.background,
@@ -236,6 +238,7 @@ class _RegisterPageState extends State<RegisterPage> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

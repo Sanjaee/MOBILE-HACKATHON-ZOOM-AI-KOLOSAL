@@ -188,6 +188,7 @@ class _AuthGuardWidget extends StatefulWidget {
 
 class _AuthGuardWidgetState extends State<_AuthGuardWidget> {
   bool _isChecking = true;
+  bool _hasRedirected = false;
 
   @override
   void initState() {
@@ -196,7 +197,16 @@ class _AuthGuardWidgetState extends State<_AuthGuardWidget> {
   }
 
   Future<void> _checkAuth() async {
+    // Prevent multiple redirects
+    if (_hasRedirected) {
+      setState(() {
+        _isChecking = false;
+      });
+      return;
+    }
+
     // First check: if user is logged in and trying to access auth route
+    // Middleware: Jika sudah login, tidak boleh akses halaman auth
     var redirectTo = await AuthGuard.guardAuthRoute(
       widget.routeName,
       context,
@@ -211,10 +221,31 @@ class _AuthGuardWidgetState extends State<_AuthGuardWidget> {
     }
 
     if (mounted) {
-      if (redirectTo != null) {
+      if (redirectTo != null && redirectTo != widget.routeName) {
+        // Mark as redirected to prevent infinite loop
+        _hasRedirected = true;
+        
         // Redirect needed - navigate to appropriate route
+        // Use pushNamedAndRemoveUntil to clear stack and prevent back navigation
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          Navigator.of(context).pushReplacementNamed(redirectTo!);
+          if (mounted) {
+            try {
+              // Use rootNavigator to ensure we clear the entire navigation stack
+              final navigator = Navigator.of(context, rootNavigator: true);
+              navigator.pushNamedAndRemoveUntil(
+                redirectTo!,
+                (route) => false, // Remove ALL previous routes including auth pages
+              );
+            } catch (e) {
+              debugPrint('[AuthGuard] Navigation error: $e');
+              // If navigation fails, show the page
+              if (mounted) {
+                setState(() {
+                  _isChecking = false;
+                });
+              }
+            }
+          }
         });
       } else {
         setState(() {
@@ -228,6 +259,7 @@ class _AuthGuardWidgetState extends State<_AuthGuardWidget> {
   Widget build(BuildContext context) {
     if (_isChecking) {
       return const Scaffold(
+        backgroundColor: Color(0xFF0A0A0F),
         body: Center(
           child: CircularProgressIndicator(),
         ),
@@ -236,6 +268,5 @@ class _AuthGuardWidgetState extends State<_AuthGuardWidget> {
 
     return widget.child;
   }
-
 }
 

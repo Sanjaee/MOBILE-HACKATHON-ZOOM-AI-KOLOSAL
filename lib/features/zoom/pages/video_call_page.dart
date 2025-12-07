@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../data/services/room_service.dart';
@@ -455,14 +456,46 @@ class _VideoCallPageState extends State<VideoCallPage> with SingleTickerProvider
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  widget.roomId,
-                  style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 12,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.roomId,
+                        style: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 12,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    // Copy ID button
+                    GestureDetector(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: widget.roomId));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Room ID berhasil disalin'),
+                            duration: Duration(seconds: 2),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Icon(
+                          Icons.copy,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 2),
                 const Text(
@@ -653,33 +686,44 @@ class _VideoCallPageState extends State<VideoCallPage> with SingleTickerProvider
         .where((pub) => pub.source == TrackSource.microphone)
         .every((pub) => pub.muted || pub.track == null);
 
-    final hasVideo = videoTrack != null;
+    // For local participant, check if camera is enabled
+    // If camera is disabled, don't show video even if track exists
+    final shouldShowVideo = isLocal 
+        ? (_isCameraEnabled && videoTrack != null)
+        : videoTrack != null;
     
     // Debug: Log video track status
     if (isLocal) {
-      debugPrint('[VideoCall] Local participant - hasVideo: $hasVideo');
+      debugPrint('[VideoCall] Local participant - shouldShowVideo: $shouldShowVideo, cameraEnabled: $_isCameraEnabled, hasVideoTrack: ${videoTrack != null}');
     } else {
-      debugPrint('[VideoCall] Remote participant ${participant.identity} - hasVideo: $hasVideo');
+      debugPrint('[VideoCall] Remote participant ${participant.identity} - shouldShowVideo: $shouldShowVideo');
     }
+
+    // Get the video track to render (only if we should show video)
+    final trackToRender = shouldShowVideo ? videoTrack : null;
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey[900],
+        color: Colors.black, // Background hitam solid ketika tidak ada video
         borderRadius: BorderRadius.circular(12),
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Video or placeholder
-          if (hasVideo)
+          // Video atau background hitam
+          if (trackToRender != null)
             SizedBox.expand(
               child: VideoTrackRenderer(
-                videoTrack!,
+                trackToRender,
               ),
             )
           else
-            _buildNoVideoPlaceholder(participant.identity),
+            // Background hitam solid ketika kamera off
+            Container(
+              color: Colors.black,
+              child: _buildNoVideoPlaceholder(participant.identity),
+            ),
 
           // Name label
           Positioned(
@@ -739,7 +783,7 @@ class _VideoCallPageState extends State<VideoCallPage> with SingleTickerProvider
                       size: 14,
                     ),
                   ),
-                if (!hasVideo) ...[
+                if (!shouldShowVideo) ...[
                   const SizedBox(width: 4),
                   Container(
                     padding: const EdgeInsets.all(4),
@@ -764,7 +808,7 @@ class _VideoCallPageState extends State<VideoCallPage> with SingleTickerProvider
 
   Widget _buildNoVideoPlaceholder(String identity) {
     return Container(
-      color: Colors.grey[850],
+      color: Colors.black, // Background hitam solid
       child: Center(
         child: Container(
           width: 60,
